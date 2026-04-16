@@ -144,7 +144,7 @@ int index_load(Index *index) {
         IndexEntry entry;
         char hex[HASH_HEX_SIZE + 1];
 
-        int ret = fscanf(f, "%u %64s %lu %u %s",
+        int ret = fscanf(f, "%o %64s %lu %u %s",
                          &entry.mode,
                          hex,
                          &entry.mtime_sec,
@@ -182,8 +182,7 @@ int index_load(Index *index) {
 int compare_entries(const void *a, const void *b) {
     return strcmp(((IndexEntry*)a)->path, ((IndexEntry*)b)->path);
 }
-
-iint index_save(const Index *index) {
+int index_save(const Index *index) {
     FILE *f = fopen(".pes/index", "w");
     if (!f) return -1;
 
@@ -191,7 +190,7 @@ iint index_save(const Index *index) {
         char hex[HASH_HEX_SIZE + 1];
         hash_to_hex(&index->entries[i].hash, hex);
 
-        fprintf(f, "%u %s %lu %u %s\n",
+        fprintf(f, "%o %s %lu %u %s\n",
                 index->entries[i].mode,
                 hex,
                 index->entries[i].mtime_sec,
@@ -237,13 +236,13 @@ int index_add(Index *index, const char *path) {
     IndexEntry *existing = index_find(index, path);
 
     if (existing) {
-        existing->id = id;
+        existing->hash = id;
         existing->mtime_sec = st.st_mtime;
         existing->size = st.st_size;
         existing->mode = st.st_mode;
     } else {
         IndexEntry *entry = &index->entries[index->count++];
-        entry->id = id;
+        entry->hash = id;
         entry->mtime_sec = st.st_mtime;
         entry->size = st.st_size;
         entry->mode = st.st_mode;
