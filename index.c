@@ -140,18 +140,18 @@ int index_load(Index *index) {
     FILE *f = fopen(".pes/index", "r");
     if (!f) return 0;
 
-    while (1) {
+    char line[1024];
+
+    while (fgets(line, sizeof(line), f)) {
         IndexEntry entry;
         char hex[HASH_HEX_SIZE + 1];
 
-        int ret = fscanf(f, "%o %64s %lu %u %s",
+        int ret = sscanf(line, "%o %64s %lu %u %[^\n]",
                          &entry.mode,
                          hex,
                          &entry.mtime_sec,
                          &entry.size,
                          entry.path);
-
-        if (ret == EOF) break;
 
         if (ret != 5) {
             fclose(f);
