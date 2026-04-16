@@ -138,17 +138,13 @@ int index_load(Index *index) {
     index->count = 0;
 
     FILE *f = fopen(".pes/index", "r");
-
-    // If index file doesn't exist → empty index
-    if (!f) {
-        return 0;
-    }
+    if (!f) return 0;
 
     while (1) {
         IndexEntry entry;
         char hex[HASH_HEX_SIZE + 1];
 
-        int ret = fscanf(f, "%o %64s %lu %u %s",
+        int ret = fscanf(f, "%u %64s %lu %u %s",
                          &entry.mode,
                          hex,
                          &entry.mtime_sec,
@@ -187,33 +183,24 @@ int compare_entries(const void *a, const void *b) {
     return strcmp(((IndexEntry*)a)->path, ((IndexEntry*)b)->path);
 }
 
-int index_save(const Index *index) {
-    char tmp_path[256];
-    snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", INDEX_FILE);
-
-    FILE *f = fopen(tmp_path, "w");
+iint index_save(const Index *index) {
+    FILE *f = fopen(".pes/index", "w");
     if (!f) return -1;
 
-    Index sorted = *index;
-    qsort(sorted.entries, sorted.count, sizeof(IndexEntry), compare_entries);
-
-    for (int i = 0; i < sorted.count; i++) {
+    for (int i = 0; i < index->count; i++) {
         char hex[HASH_HEX_SIZE + 1];
-        hash_to_hex(&sorted.entries[i].id, hex);
+        hash_to_hex(&index->entries[i].hash, hex);
 
-        fprintf(f, "%o %s %ld %ld %s\n",
-                sorted.entries[i].mode,
+        fprintf(f, "%u %s %lu %u %s\n",
+                index->entries[i].mode,
                 hex,
-                sorted.entries[i].mtime_sec,
-                sorted.entries[i].size,
-                sorted.entries[i].path);
+                index->entries[i].mtime_sec,
+                index->entries[i].size,
+                index->entries[i].path);
     }
 
-    fflush(f);
-    fsync(fileno(f));
     fclose(f);
-
-    return rename(tmp_path, INDEX_FILE);
+    return 0;
 }
 
 // Stage a file for the next commit.
