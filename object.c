@@ -4,8 +4,49 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <openssl/sha.h>
+#include <ctype.h>
 
-void sha256_hex(const unsigned char *data, size_t len, char *out);
+void sha256_hex(const unsigned char *data, size_t len, char *out) {
+    unsigned char hash[SHA256_DIGEST_LENGTH];
+    SHA256_CTX sha256;
+    SHA256_Init(&sha256);
+    SHA256_Update(&sha256, data, len);
+    SHA256_Final(hash, &sha256);
+
+    for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
+        sprintf(out + (i * 2), "%02x", hash[i]);
+    }
+    out[SHA256_DIGEST_LENGTH * 2] = '\0';
+}
+
+void hash_to_hex(const ObjectID *id, char *hex_out) {
+    for (int i = 0; i < HASH_SIZE; i++) {
+        sprintf(hex_out + (i * 2), "%02x", id->hash[i]);
+    }
+    hex_out[HASH_HEX_SIZE] = '\0';
+}
+
+int hex_to_hash(const char *hex, ObjectID *id_out) {
+    if (strlen(hex) != HASH_HEX_SIZE) return -1;
+
+    for (int i = 0; i < HASH_SIZE; i++) {
+        char byte_str[3];
+        strncpy(byte_str, hex + (i * 2), 2);
+        byte_str[2] = '\0';
+
+        // Check if valid hex characters
+        for (int j = 0; j < 2; j++) {
+            if (!isxdigit(byte_str[j])) return -1;
+        }
+
+        unsigned int byte_val;
+        if (sscanf(byte_str, "%02x", &byte_val) != 1) return -1;
+        id_out->hash[i] = (uint8_t)byte_val;
+    }
+
+    return 0;
+}
 
 static void ensure_dir(const char *path) {
     mkdir(path, 0755);
@@ -84,5 +125,70 @@ int object_read(const char *hash, char **type_out, void **data_out, size_t *size
     memcpy(*data_out, null + 1, size);
 
     free(buf);
+    return 0;
+}
+
+// Helper function: get the path to an object file from its ObjectID
+void object_path(const ObjectID *id, char *path_out, size_t path_size) {
+    char hex[HASH_HEX_SIZE + 1];
+    hash_to_hex(id, hex);
+    snprintf(path_out, path_size, ".pes/objects/%.2s/%s", hex, hex + 2);
+}
+
+// Check if an object exists in the store
+int object_exists(const ObjectID *id) {
+    char path[256];
+    object_path(id, path, sizeof(path));
+    FILE *f = fopen(path, "rb");
+    if (f) {
+        fclose(f);
+        return 1;
+    }
+    return 0;
+}
+
+// Type conversion helper
+const char* object_type_to_string(ObjectType type) {
+    switch (type) {
+        case OBJ_BLOB:   return "blob";
+        case OBJ_TREE:   return "tree";
+        case OBJ_COMMIT: return "commit";
+        default:         return NULL;
+    }
+}
+
+// String to type conversion
+ObjectType string_to_object_type(const char *type_str) {
+    if (strcmp(type_str, "blob") == 0)   return OBJ_BLOB;
+    if (strcmp(type_str, "tree") == 0)   return OBJ_TREE;
+    if (strcmp(type_str, "commit") == 0) return OBJ_COMMIT;
+    return -1;
+}
+
+// Wrapper: write object using ObjectType and ObjectID
+int object_write_typed(ObjectType type, const void *data, size_t len, ObjectID *id_out) {
+    const char *type_str = object_type_to_string(type);
+    if (!type_str) return -1;
+
+    char hex_hash[HASH_HEX_SIZE + 1];
+    if (object_write(type_str, data, len, hex_hash) != 0) return -1;
+
+    return hex_to_hash(hex_hash, id_out);
+}
+
+// Wrapper: read object using ObjectType and ObjectID
+int object_read_typed(const ObjectID *id, ObjectType *type_out, void **data_out, size_t *len_out) {
+    char hex[HASH_HEX_SIZE + 1];
+    hash_to_hex(id, hex);
+
+    char *type_str = NULL;
+    if (object_read(hex, &type_str, data_out, len_out) != 0) return -1;
+
+    ObjectType type = string_to_object_type(type_str);
+    free(type_str);
+
+    if (type == (ObjectType)-1) return -1;
+
+    *type_out = type;
     return 0;
 }

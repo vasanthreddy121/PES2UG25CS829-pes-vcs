@@ -10,6 +10,7 @@
 //   "100644 hello.txt\0" followed by 32 raw bytes of SHA-256
 
 #include "tree.h"
+#include "index.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -141,7 +142,7 @@ int tree_from_index(ObjectID *id_out) {
 
         entry->mode = index.entries[i].mode;
         strncpy(entry->name, index.entries[i].path, sizeof(entry->name));
-        entry->hash = index.entries[i].id;
+        entry->hash = index.entries[i].hash;
     }
 
     void *data;
@@ -149,7 +150,13 @@ int tree_from_index(ObjectID *id_out) {
 
     if (tree_serialize(&tree, &data, &len) != 0) return -1;
 
-    if (object_write(OBJ_TREE, data, len, id_out) != 0) {
+    char hex_hash[HASH_HEX_SIZE + 1];
+    if (object_write("tree", data, len, hex_hash) != 0) {
+        free(data);
+        return -1;
+    }
+
+    if (hex_to_hash(hex_hash, id_out) != 0) {
         free(data);
         return -1;
     }

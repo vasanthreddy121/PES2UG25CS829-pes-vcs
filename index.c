@@ -223,8 +223,14 @@ int index_add(Index *index, const char *path) {
     fread(data, 1, size, f);
     fclose(f);
 
+    char hex_hash[HASH_HEX_SIZE + 1];
+    if (object_write("blob", data, size, hex_hash) != 0) {
+        free(data);
+        return -1;
+    }
+
     ObjectID id;
-    if (object_write(OBJ_BLOB, data, size, &id) != 0) {
+    if (hex_to_hash(hex_hash, &id) != 0) {
         free(data);
         return -1;
     }
